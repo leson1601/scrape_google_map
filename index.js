@@ -29,20 +29,45 @@ async function parsePlaces(page) {
 
       if (infoElements[2]) {
         const name = await infoElements[2].$eval('h1.DUwDvf span', el => el.textContent);
+
         const type = await page.evaluate(() => {
           const element = document.querySelector('button.DkEaL[jsaction="pane.rating.category"]');
-
           if (element) {
             return element.textContent;
           }
           return '';
         });
-        const address = await infoElements[2].$$eval('div.Io6YTe', el => el[0].textContent);
+
+        const rate = await page.evaluate(() => {
+          const element = document.querySelector('.mmu3tf span span span');
+          if (element) {
+            return element.textContent;
+          }
+
+          return '';
+        });
+
+        const address = await page.evaluate(() => {
+          const element = document.querySelector('button.CsEnBe[data-item-id="address"] .Io6YTe');
+          if (element) {
+            return element.textContent;
+          }
+
+          return '';
+        });
+
+        // const address = await infoElements[2].$$eval('div.Io6YTe', el => el[0].textContent);
         const { street, postalCode, ort } = splitAddress(address);
+
         const website = await page.evaluate(() => {
           const element = document.querySelector('a.CsEnBe[aria-label^="Website"]');
           if (element) {
-            return element.href;
+            // return element.href;
+            return {
+              t: "s",
+              v: element.href,
+              l: { Target: element.href, Tooltip: element.href }
+            };
           }
 
           return '';
@@ -57,12 +82,20 @@ async function parsePlaces(page) {
         });
         // const phone = await infoElements[2].$eval('.CsEnBe[aria-label^="Phone"] .Io6YTe', el => el.textContent)
         // console.log({ name, type, address, website, phone });
-        scrapedData.push({ name, type, street, postalCode, ort, website, phone });
+        // const url = {
+        //   t: "s",
+        //   v: page.url(),
+        //   l: { Target: page.url(), Tooltip: page.url() } // Target is the URL, optionally specify Tooltip
+        // };
+        // const urlCell = {
+        //   t: "s",
+        //   v: "Google map",
+        //   f: `HYPERLINK("${page.url()}", "Google map")`
+        // };
+        // const url = `=HYPERLINK("${page.url()}", "Click for report")`
+        scrapedData.push({ name, type, rate, street, postalCode, ort, website, phone, url: page.url() });
       }
 
-      // const name = await page.$eval('.dS8AEf h1.DUwDvf span', el => el.textContent)
-      // console.log(name)
-      // await page.waitForTimeout(300000);      
 
     }
   }
@@ -91,7 +124,32 @@ async function autoScroll(page) {
       }, 100);
     });
   });
+  await page.waitForTimeout(2000);
 }
+const login = async (page) => {
+  await page.goto('https://accounts.google.com/signin/v2/identifier');
+  await page.type('[type="email"]', "leson2980");
+  await page.click('#identifierNext');
+  await page.waitForTimeout(4000);
+  // await page.waitForNavigation();
+  await page.waitForSelector('input[type="password"]');
+
+  await page.type('[type="password"', "gdy5TQM7njg9pmb!mvr");
+  await page.keyboard.press('Enter');
+  await page.waitForNavigation();
+};
+
+const exportXLSX = (scrapedData, fileName) => {
+  const headings = [["Firmierung/Name", "Typ", "Bewertung", "Straße und Hausnummer", "PLZ", "Stadt", "Webseite", "Telefon", "URL Fundort"]];
+  // workbook
+  const wb = XLSX.utils.book_new();
+  // worksheet
+  const ws = XLSX.utils.json_to_sheet(scrapedData, { origin: 'A2', skipHeader: true });
+  XLSX.utils.sheet_add_aoa(ws, headings);
+
+  XLSX.utils.book_append_sheet(wb, ws);
+  XLSX.writeFile(wb, fileName);
+};
 
 // That's it, the rest is puppeteer usage as normal 😊
 puppeteer.launch(
@@ -106,28 +164,13 @@ puppeteer.launch(
   // await page.setViewport({ width: 1300, height: 900 });
   // await page.setViewport({ width: 1536, height: 1024 });
   //  await page.setViewport({ width: 0, height: 0 });
-  await page.goto('https://accounts.google.com/signin/v2/identifier');
-  await page.type('[type="email"]', "leson2980");
-  await page.click('#identifierNext');
-  // await page.waitForTimeout(3500);
-  await page.waitForNavigation();
-
-  await page.type('[type="password"', "gdy5TQM7njg9pmb!mvr");
-  await page.keyboard.press('Enter');
-  await page.waitForNavigation();
-  await page.goto('https://www.google.com/maps/search/therapeut+22089');
+  await login(page);
+  await page.goto('https://www.google.com/maps/search/physiotherapie+20357');
   await page.waitForNavigation();
   await autoScroll(page);
   const scrapedData = await parsePlaces(page);
 
-  // workbook
-  const wb = XLSX.utils.book_new();
-  // worksheet
-  const ws = XLSX.utils.json_to_sheet(scrapedData);
-  XLSX.utils.book_append_sheet(wb, ws);
-  XLSX.writeFile(wb, "scrapedData.xlsx");
+  exportXLSX(scrapedData, "scrapedData.xlsx");
 
   await browser.close();
-
-  // document.querySelectorAll("a.CsEnBe[aria-label^='Website']")
 });
